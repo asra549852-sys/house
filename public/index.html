@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomeFinder – Homes for Sale</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1d2a26;--mute:#66726d;--line:#e0dcd2;--acc:#1f6f5c}
+@media (prefers-color-scheme:dark){:root{--bg:#141a18;--card:#1d2522;--ink:#e9eeec;--mute:#92a19b;--line:#2c3733;--acc:#4fb79d}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+.wrap{max-width:1100px;margin:auto;padding:0 20px}
+h1{margin:28px 0 4px;font-size:28px}h1 span{color:var(--acc)}.sub{color:var(--mute);margin:0 0 16px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.loc{grid-column:1/-1;display:flex;gap:8px}
+input,select,button{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink)}
+.loc input{flex:1}button.go{background:var(--acc);color:#fff;border:0;cursor:pointer}
+.bar{display:flex;justify-content:space-between;color:var(--mute);font-size:14px;margin:14px 0 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer}
+.pic{position:relative;height:170px;background:#cfd8d4;overflow:hidden}
+.pic img{width:100%;height:100%;object-fit:cover;display:block}
+.nav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:0;border-radius:50%;width:30px;height:30px;cursor:pointer;padding:0}
+.nav.l{left:6px}.nav.r{right:6px}
+.cnt{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.55);color:#fff;font-size:12px;padding:1px 8px;border-radius:99px}
+.nophoto{display:grid;place-items:center;height:100%;color:var(--mute);font-size:14px}
+.cb{padding:12px 14px}.price{font-weight:700;font-size:20px}.meta{color:var(--mute);font-size:14px}
+.more{display:block;margin:20px auto 40px}
+.msg{grid-column:1/-1;text-align:center;color:var(--mute);padding:40px 0}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+#modal.on{display:flex}.box{background:var(--card);border-radius:14px;max-width:640px;width:100%;max-height:92%;overflow:auto}
+.box .pic{height:300px}.pad{padding:18px}.stats{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0}.stats b{display:block;font-size:18px}
+.foot{color:var(--mute);font-size:12px;padding:0 0 30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Home<span>Finder</span></h1>
+<p class="sub">Search homes for sale in any city or ZIP code.</p>
+<form id="f">
+ <div class="loc"><input id="location" placeholder="City or ZIP, e.g. Houston or 77002" autofocus><button class="go">Search</button></div>
+ <select id="minprice"><option value="">Min price</option><option value="100000">$100k</option><option value="200000">$200k</option><option value="300000">$300k</option><option value="500000">$500k</option></select>
+ <select id="maxprice"><option value="">Max price</option><option value="200000">$200k</option><option value="300000">$300k</option><option value="500000">$500k</option><option value="1000000">$1M</option></select>
+ <select id="minbeds"><option value="">Beds</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option><option value="4">4+</option></select>
+ <select id="minbaths"><option value="">Baths</option><option value="1">1+</option><option value="2">2+</option><option value="3">3+</option></select>
+ <select id="sort"><option value="new">Newest</option><option value="lo">Price: low–high</option><option value="hi">Price: high–low</option></select>
+</form>
+<div class="bar"><span id="status"></span></div>
+<div class="grid" id="grid"></div>
+<button class="more" id="more" hidden>Load more</button>
+<p class="foot" id="foot"></p>
+</div>
+<div id="modal"><div class="box" id="box"></div></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=n=>"$"+Number(n||0).toLocaleString();
+let homes=[],offset=0;
+
+function pic(h,big){
+  if(!h.photos.length) return `<div class="pic"><div class="nophoto">No photo available</div></div>`;
+  return `<div class="pic" data-id="${esc(h.id)}" data-i="0"><img src="${esc(h.photos[0])}" alt="${esc(h.address)}" loading="lazy">`+
+   (h.photos.length>1?`<button class="nav l" data-d="-1" aria-label="Previous">‹</button><button class="nav r" data-d="1" aria-label="Next">›</button><span class="cnt">1 / ${h.photos.length}</span>`:"")+`</div>`;
+}
+function card(h){
+  return `<div class="card" data-open="${esc(h.id)}">${pic(h)}<div class="cb"><div class="price">${money(h.price)}</div>
+  <div class="meta">${h.beds??"–"} bd · ${h.baths??"–"} ba · ${h.sqft?Number(h.sqft).toLocaleString()+" sqft":"– sqft"}</div>
+  <div>${esc(h.address)}, ${esc(h.city)}, ${esc(h.state)} ${esc(h.zip)}</div></div></div>`;
+}
+async function search(more){
+  if(!more){offset=0;homes=[];$("grid").innerHTML="";}
+  $("status").textContent="Searching…";$("more").hidden=true;
+  const p=new URLSearchParams({offset});
+  ["location","minprice","maxprice","minbeds","minbaths","sort"].forEach(k=>{if($(k).value)p.set(k,$(k).value)});
+  try{
+    const r=await fetch("/api/search?"+p);const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    homes=homes.concat(d.homes);offset+=d.homes.length;
+    $("grid").insertAdjacentHTML("beforeend",d.homes.map(card).join(""));
+    $("status").textContent=homes.length?`Showing ${homes.length} homes`:"";
+    if(!homes.length) $("grid").innerHTML='<div class="msg">No homes found. Try a different location or looser filters.</div>';
+    $("more").hidden=d.homes.length<12;
+    if(d.lastUpdate) $("foot").textContent="Listing data last updated "+d.lastUpdate+". Listings are provided by the MLS and are deemed reliable but not guaranteed.";
+  }catch(e){$("status").textContent="";$("grid").innerHTML=`<div class="msg">${esc(e.message||"Something went wrong.")}</div>`}
+}
+function step(el,d){
+  const h=homes.find(x=>String(x.id)===el.dataset.id);if(!h)return;
+  let i=(+el.dataset.i+d+h.photos.length)%h.photos.length;el.dataset.i=i;
+  el.querySelector("img").src=h.photos[i];el.querySelector(".cnt").textContent=`${i+1} / ${h.photos.length}`;
+}
+function openModal(id){
+  const h=homes.find(x=>String(x.id)===String(id));if(!h)return;
+  $("box").innerHTML=pic(h)+`<div class="pad"><div class="price" style="font-size:26px">${money(h.price)}</div>
+  <div class="meta">${esc(h.address)}, ${esc(h.city)}, ${esc(h.state)} ${esc(h.zip)}</div>
+  <div class="stats"><div><b>${h.beds??"–"}</b>Beds</div><div><b>${h.baths??"–"}</b>Baths</div><div><b>${h.sqft?Number(h.sqft).toLocaleString():"–"}</b>Sq ft</div><div><b>${esc(h.year||"–")}</b>Built</div></div>
+  <p>${esc(h.remarks||"No description provided.")}</p><p class="meta">${h.office?"Listed by "+esc(h.office):""}</p>
+  <button onclick="$('modal').classList.remove('on')">Close</button></div>`;
+  $("modal").classList.add("on");
+}
+document.addEventListener("click",e=>{
+  const n=e.target.closest(".nav");
+  if(n){e.stopPropagation();step(n.closest(".pic"),+n.dataset.d);return}
+  const c=e.target.closest("[data-open]");if(c){openModal(c.dataset.open);return}
+  if(e.target.id==="modal")$("modal").classList.remove("on");
+});
+$("f").addEventListener("submit",e=>{e.preventDefault();search(false)});
+["minprice","maxprice","minbeds","minbaths","sort"].forEach(k=>$(k).addEventListener("change",()=>search(false)));
+$("more").onclick=()=>search(true);
+search(false);
+</script>
+</body>
+</html>
